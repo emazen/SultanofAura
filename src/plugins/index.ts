@@ -6,6 +6,7 @@ import { FixedToolbarFeature, HeadingFeature, lexicalEditor } from '@payloadcms/
 import { ecommercePlugin } from '@payloadcms/plugin-ecommerce'
 
 import { bankTransferAdapter } from '@/payments/bankTransfer'
+import { iyzicoAdapter } from '@/payments/iyzico'
 import { CartsCollection } from '@/collections/Carts'
 import { trendyolFields, wholesalePriceFields } from '@/fields/wholesalePriceField'
 import { TRY } from '@/lib/currency'
@@ -172,7 +173,10 @@ export const plugins: Plugin[] = [
             iban: process.env.BANK_IBAN || 'TR00 0000 0000 0000 0000 0000 00',
           },
         }),
-        // TODO: iyzicoAdapter() for card payments — see docs/PAYMENTS.md
+        // Card payments. Registered unconditionally so the endpoints and the admin
+        // fields always exist; the checkout UI only offers it when
+        // NEXT_PUBLIC_IYZICO_ENABLED is set (see src/payments/iyzico/client.ts).
+        iyzicoAdapter(),
       ],
     },
     products: {

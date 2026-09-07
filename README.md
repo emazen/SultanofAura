@@ -32,9 +32,11 @@ Onay akışı: müşteri `/toptan-basvuru`'da VKN girer → admin **Users** list
 
 ## Ödeme
 
-Şu an tek yöntem **Havale/EFT** (`src/payments/bankTransfer.ts`): sipariş `processing` durumunda açılır, işlem `pending` kalır; para gelince admin **Transactions**'ta `succeeded` yapar ve **Orders**'a kargo takip numarasını girer. Banka bilgileri `.env`'de (`BANK_*`).
+İki yöntem var, ikisi de aynı `PaymentAdapter` arayüzünü kullanıyor (ayrıntı: `docs/PAYMENTS.md`).
 
-Kart ödemesi için sıradaki iş: iyzico adapter'ı (aynı `PaymentAdapter` arayüzü; bkz. `docs/PAYMENTS.md`).
+**Havale / EFT** (`src/payments/bankTransfer.ts`): sipariş `processing` durumunda açılır, işlem `pending` kalır; para gelince admin **Transactions**'ta `succeeded` yapar ve **Orders**'a kargo takip numarasını girer. Banka bilgileri `.env`'de (`BANK_*`).
+
+**Kart — iyzico Checkout Form** (`src/payments/iyzico/`): 3D Secure ve taksit iyzico tarafında. Müşteri iyzico formunda öder → iyzico tarayıcıyı `/api/payments/iyzico/callback`'e yönlendirir → ödeme iyzico'ya tekrar sorulup yanıt imzası ve tutar doğrulanır → `/checkout/confirm-order` siparişi oluşturur. Anahtarlar `.env`'de (`IYZICO_*`); checkout'ta kart seçeneği yalnızca `NEXT_PUBLIC_IYZICO_ENABLED=true` iken görünür, dolayısıyla anahtar girilmeden havale akışı bozulmaz. Sandbox testi ve test kartları `docs/PAYMENTS.md`'de.
 
 ## Trendyol aktarımı
 
@@ -52,7 +54,7 @@ pnpm import:trendyol --file=export.json --dry-run
 
 ## Yapılacaklar
 
-- [ ] iyzico kart ödemesi
+- [x] iyzico kart ödemesi (sandbox; canlı anahtarlarla test edilecek)
 - [ ] Gerçek ürün fotoğrafları + AI lifestyle varyantları (içerik pipeline'ı)
 - [ ] Kalan İngilizce arayüz metinleri (hesap sayfaları, form hataları)
 - [ ] Yasal sayfalar: mesafeli satış sözleşmesi, ön bilgilendirme, KVKK, iade

@@ -17,7 +17,12 @@ Prices are integers in **kuruş**. Single currency TRY (`src/lib/currency.ts`).
 - Storefront: `<TierPrice item={productOrVariant} quantity={n} />` (`src/components/TierPrice.tsx`) renders the right tier; `usePrice`/`resolvePrice` in `src/hooks/usePricing.ts`. Application page `/toptan-basvuru` (`src/components/forms/WholesaleApplicationForm`).
 
 ## Payments
-`src/payments/bankTransfer.ts` — havale/EFT adapter (`PaymentAdapter` from the plugin). Bank details from env `BANK_NAME`, `BANK_ACCOUNT_HOLDER`, `BANK_IBAN`. Order opens `processing`, transaction stays `pending` until the owner marks it `succeeded` in admin. Card payments: implement an iyzico adapter next — flow written up in `docs/PAYMENTS.md`. Register adapters in `src/plugins/index.ts` (server) and `src/providers/index.tsx` (client), checkout UI in `src/components/checkout/CheckoutPage.tsx` + `src/components/forms/CheckoutForm`.
+Two adapters, both `PaymentAdapter` from the plugin; registered in `src/plugins/index.ts` (server) and `src/providers/index.tsx` (client). Checkout UI in `src/components/checkout/CheckoutPage.tsx` (payment method choice) + `src/components/forms/CheckoutForm` (havale) + `src/components/checkout/IyzicoCheckoutForm.tsx` (card).
+
+- `src/payments/bankTransfer.ts` — havale/EFT. Bank details from env `BANK_NAME`, `BANK_ACCOUNT_HOLDER`, `BANK_IBAN`. Order opens `processing`, transaction stays `pending` until the owner marks it `succeeded` in admin.
+- `src/payments/iyzico/` — iyzico Checkout Form (card, 3DS, installments on iyzico's side). Callback endpoint `/api/payments/iyzico/callback` re-queries iyzico, verifies the response signature and the amount, then `/checkout/confirm-order` creates the order. Never trust the callback body; never mark a transaction paid without `verifyRetrieveSignature`. Server adapter is always registered, but the checkout only offers card when `NEXT_PUBLIC_IYZICO_ENABLED=true`. Flow, env and sandbox test cards: `docs/PAYMENTS.md`.
+
+Per-line prices for the iyzico basket come from `src/lib/cartPricing.ts` (`resolveCartLines`), the same helper the Carts hook uses for `cart.subtotal` — keep them on one code path so the basket total and the charged amount cannot drift.
 
 ## Orders
 `ordersCollectionOverride` in `src/plugins/index.ts` adds `shipping` group (carrier select, trackingNumber, shippedAt). Shipping addresses restricted to `TR`.
@@ -33,7 +38,7 @@ Prices are integers in **kuruş**. Single currency TRY (`src/lib/currency.ts`).
 
 ## Roadmap (in order)
 1. **Repo hygiene**: confirm `pnpm build` passes; run the seed; click through as the three test users.
-2. **iyzico adapter** (`docs/PAYMENTS.md`) + checkout UI choice between Havale and Kart. Sandbox first.
+2. ~~**iyzico adapter** + checkout UI choice between Havale and Kart~~ — built (`src/payments/iyzico/`), unit tested, and type-checked; still needs a run against real sandbox keys with a callback-reachable `NEXT_PUBLIC_SERVER_URL` (tunnel), then live keys.
 3. **Trendyol import** against the live account once the owner shares API credentials; review the mapping (categories, variant axis) and wholesale prices in admin.
 4. **Content pipeline** (`scripts/` ): one real photo per product in → 3–5 lifestyle images via an image-editing model (product fidelity matters — do not generate the product itself) + SEO title/description/body in Turkish → written into Payload. Video only for a selected top 20–30.
 5. **SEO**: category page copy, blog (Pages collection is layout-builder enabled), schema.org Product JSON-LD already on product pages (price emitted in lira), sitemap/robots, Search Console.

@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/providers/Auth'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import React, { Suspense, useCallback, useEffect, useState } from 'react'
 
 import { CheckoutForm, type BankTransferPaymentData } from '@/components/forms/CheckoutForm'
 import { BANK_TRANSFER } from '@/payments/bankTransfer'
+import { IYZICO, IYZICO_LABEL, isIyzicoEnabled, type IyzicoPaymentData } from '@/payments/iyzico/client'
+import { IyzicoCheckoutForm } from '@/components/checkout/IyzicoCheckoutForm'
 import { TierPrice } from '@/components/TierPrice'
 import { useAddresses, useCart, usePayments } from '@payloadcms/plugin-ecommerce/client/react'
 import { CheckoutAddresses } from '@/components/checkout/CheckoutAddresses'
@@ -25,9 +27,14 @@ import { toast } from 'sonner'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 
 
+type PaymentMethod = typeof BANK_TRANSFER | typeof IYZICO
+
+type PaymentData = BankTransferPaymentData | IyzicoPaymentData
+
 export const CheckoutPage: React.FC = () => {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { cart } = useCart()
   const [error, setError] = useState<null | string>(null)
   /**
@@ -35,7 +42,9 @@ export const CheckoutPage: React.FC = () => {
    */
   const [email, setEmail] = useState('')
   const [emailEditable, setEmailEditable] = useState(true)
-  const [paymentData, setPaymentData] = useState<null | BankTransferPaymentData>(null)
+  const [paymentData, setPaymentData] = useState<null | PaymentData>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(BANK_TRANSFER)
+  const [isInitiating, setIsInitiating] = useState(false)
   const { initiatePayment } = usePayments()
   const { addresses } = useAddresses()
   const [shippingAddress, setShippingAddress] = useState<Partial<Address>>()
@@ -45,9 +54,37 @@ export const CheckoutPage: React.FC = () => {
 
   const cartIsEmpty = !cart || !cart.items || !cart.items.length
 
+  // Coming back from a card payment that did not go through: the callback endpoint
+  // redirects here with ?payment=failed|error.
+  const callbackError =
+    searchParams.get('payment') === 'failed'
+      ? 'Ödeme tamamlanamadı. Kart bilgilerinizi kontrol edip tekrar deneyebilirsiniz.'
+      : searchParams.get('payment') === 'error'
+        ? 'Ödeme sırasında beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.'
+        : null
+
+  const visibleError = error ?? callbackError
+
   const canGoToPayment = Boolean(
     (email || user) && billingAddress && (billingAddressSameAsShipping || shippingAddress),
   )
+
+  // Card payments only show up once the deployment has iyzico credentials wired in;
+  // until then Havale / EFT is the only method and there is nothing to choose.
+  const cardPaymentAvailable = isIyzicoEnabled()
+
+  const paymentMethodOptions: { description: string; label: string; value: PaymentMethod }[] = [
+    {
+      description: 'Banka hesabımıza havale/EFT yapın. Ödeme görüldüğünde siparişiniz kargoya verilir.',
+      label: 'Havale / EFT',
+      value: BANK_TRANSFER,
+    },
+    {
+      description: 'iyzico ile güvenli kart ödemesi, 3D Secure ile korunur.',
+      label: IYZICO_LABEL,
+      value: IYZICO,
+    },
+  ]
 
   // On initial load wait for addresses to be loaded and check to see if we can prefill a default one
   useEffect(() => {
@@ -73,6 +110,9 @@ export const CheckoutPage: React.FC = () => {
 
   const initiatePaymentIntent = useCallback(
     async (paymentID: string) => {
+      setIsInitiating(true)
+      setError(null)
+
       try {
         const paymentData = (await initiatePayment(paymentID, {
           additionalData: {
@@ -80,7 +120,7 @@ export const CheckoutPage: React.FC = () => {
             billingAddress,
             shippingAddress: billingAddressSameAsShipping ? billingAddress : shippingAddress,
           },
-        })) as BankTransferPaymentData
+        })) as PaymentData
 
         if (paymentData) {
           setPaymentData(paymentData)
@@ -95,9 +135,11 @@ export const CheckoutPage: React.FC = () => {
 
         setError(errorMessage)
         toast.error(errorMessage)
+      } finally {
+        setIsInitiating(false)
       }
     },
-    [billingAddress, billingAddressSameAsShipping, shippingAddress],
+    [billingAddress, billingAddressSameAsShipping, email, initiatePayment, shippingAddress],
   )
 
   if (cartIsEmpty && isProcessingPayment) {
@@ -262,22 +304,50 @@ export const CheckoutPage: React.FC = () => {
           </>
         )}
 
+        {!paymentData && cardPaymentAvailable && (
+          <>
+            <h2 className="text-3xl font-medium">Ödeme yöntemi</h2>
+            <div className="grid gap-4 sm:grid-cols-2" role="radiogroup">
+              {paymentMethodOptions.map((option) => {
+                const selected = paymentMethod === option.value
+
+                return (
+                  <button
+                    aria-checked={selected}
+                    className={[
+                      'flex flex-col items-start gap-1 rounded-lg border p-4 text-left transition-colors',
+                      selected ? 'border-primary bg-accent dark:bg-card' : 'hover:bg-accent/50',
+                    ].join(' ')}
+                    key={option.value}
+                    onClick={() => setPaymentMethod(option.value)}
+                    role="radio"
+                    type="button"
+                  >
+                    <span className="font-medium">{option.label}</span>
+                    <span className="text-primary/70 text-sm">{option.description}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
         {!paymentData && (
           <Button
             className="self-start"
-            disabled={!canGoToPayment}
+            disabled={!canGoToPayment || isInitiating}
             onClick={(e) => {
               e.preventDefault()
-              void initiatePaymentIntent(BANK_TRANSFER)
+              void initiatePaymentIntent(paymentMethod)
             }}
           >
-            Ödemeye geç
+            {isInitiating ? 'Hazırlanıyor…' : 'Ödemeye geç'}
           </Button>
         )}
 
-        {!paymentData && error && (
+        {!paymentData && visibleError && (
           <div className="my-8">
-            <Message error={error} />
+            <Message error={visibleError} />
 
             <Button
               onClick={(e) => {
@@ -294,16 +364,25 @@ export const CheckoutPage: React.FC = () => {
         <Suspense fallback={<React.Fragment />}>
           {paymentData && (
             <div className="pb-16">
-              <h2 className="font-medium text-3xl mb-6">Ödeme — Havale / EFT</h2>
+              <h2 className="mb-6 text-3xl font-medium">
+                {paymentMethod === IYZICO ? `Ödeme — ${IYZICO_LABEL}` : 'Ödeme — Havale / EFT'}
+              </h2>
               <div className="flex flex-col gap-8">
-                <CheckoutForm
-                  customerEmail={email}
-                  billingAddress={billingAddress}
-                  shippingAddress={billingAddressSameAsShipping ? billingAddress : shippingAddress}
-                  paymentData={paymentData}
-                  setProcessingPayment={setProcessingPayment}
-                />
-                <Button variant="ghost" className="self-start" onClick={() => setPaymentData(null)}>
+                {paymentMethod === IYZICO ? (
+                  <IyzicoCheckoutForm
+                    customerEmail={user ? user.email : email}
+                    paymentData={paymentData as IyzicoPaymentData}
+                  />
+                ) : (
+                  <CheckoutForm
+                    billingAddress={billingAddress}
+                    customerEmail={email}
+                    paymentData={paymentData as BankTransferPaymentData}
+                    setProcessingPayment={setProcessingPayment}
+                    shippingAddress={billingAddressSameAsShipping ? billingAddress : shippingAddress}
+                  />
+                )}
+                <Button className="self-start" onClick={() => setPaymentData(null)} variant="ghost">
                   Vazgeç
                 </Button>
               </div>

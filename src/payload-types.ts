@@ -930,10 +930,39 @@ export interface Transaction {
         id?: string | null;
       }[]
     | null;
-  paymentMethod?: 'bankTransfer' | null;
+  paymentMethod?: ('bankTransfer' | 'iyzico') | null;
   bankTransfer?: {
     reference?: string | null;
     receivedAt?: string | null;
+  };
+  iyzico?: {
+    token?: string | null;
+    conversationId?: string | null;
+    paymentId?: string | null;
+    installment?: number | null;
+    paidAmount?: number | null;
+    cardFamily?: string | null;
+    lastFourDigits?: string | null;
+    /**
+     * 1 onaylandı · 0 incelemede · -1 reddedildi
+     */
+    fraudStatus?: number | null;
+    /**
+     * Ödeme reddedildiyse ya da tutar uyuşmadıysa sebebi burada yazar.
+     */
+    note?: string | null;
+    /**
+     * Kart ödemesinde müşteri iyzico sayfasına gidip döndüğü için teslimat adresi ödeme başlarken burada saklanır.
+     */
+    shippingAddressSnapshot?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
   };
   billingAddress?: {
     title?: string | null;
@@ -1730,6 +1759,20 @@ export interface TransactionsSelect<T extends boolean = true> {
     | {
         reference?: T;
         receivedAt?: T;
+      };
+  iyzico?:
+    | T
+    | {
+        token?: T;
+        conversationId?: T;
+        paymentId?: T;
+        installment?: T;
+        paidAmount?: T;
+        cardFamily?: T;
+        lastFourDigits?: T;
+        fraudStatus?: T;
+        note?: T;
+        shippingAddressSnapshot?: T;
       };
   billingAddress?:
     | T

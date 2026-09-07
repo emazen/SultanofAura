@@ -1,6 +1,7 @@
 import { AuthProvider } from '@/providers/Auth'
 import { EcommerceProvider } from '@payloadcms/plugin-ecommerce/client/react'
 import { bankTransferAdapterClient } from '@/payments/bankTransfer'
+import { isIyzicoEnabled, iyzicoAdapterClient } from '@/payments/iyzico/client'
 import { TRY } from '@/lib/currency'
 import React from 'react'
 
@@ -11,6 +12,11 @@ import { SonnerProvider } from '@/providers/Sonner'
 export const Providers: React.FC<{
   children: React.ReactNode
 }> = ({ children }) => {
+  const paymentMethods = [
+    bankTransferAdapterClient(),
+    ...(isIyzicoEnabled() ? [iyzicoAdapterClient()] : []),
+  ]
+
   return (
     <ThemeProvider>
       <AuthProvider>
@@ -42,7 +48,7 @@ export const Providers: React.FC<{
               },
             }}
             currenciesConfig={{ defaultCurrency: TRY.code, supportedCurrencies: [TRY] }}
-            paymentMethods={[bankTransferAdapterClient()]}
+            paymentMethods={paymentMethods}
           >
             {children}
           </EcommerceProvider>
