@@ -3,7 +3,7 @@ import type { CollectionOverride } from '@payloadcms/plugin-ecommerce/types'
 
 import { isWholesaleApproved } from '@/access/wholesale'
 import { checkRole } from '@/access/utilities'
-import { PRICE_FIELD, WHOLESALE_PRICE_FIELD } from '@/lib/currency'
+import { resolveCartLines, sumLines } from '@/lib/cartPricing'
 
 /**
  * Runs AFTER the plugin's own subtotal hook. If the cart belongs to an approved
@@ -40,35 +40,9 @@ const applyWholesalePricing: CollectionBeforeChangeHook = async ({ data, req }) 
   }
   if (!isWholesaleApproved(customer)) return data
 
-  let subtotal = 0
-  for (const item of data.items) {
-    const qty = item.quantity || 0
-    if (item.variant) {
-      const id = typeof item.variant === 'object' ? item.variant.id : item.variant
-      const variant = await req.payload.findByID({
-        collection: 'variants',
-        id,
-        depth: 0,
-        overrideAccess: true,
-        select: { [PRICE_FIELD]: true, [WHOLESALE_PRICE_FIELD]: true },
-      })
-      const price = (variant as any)?.[WHOLESALE_PRICE_FIELD] ?? (variant as any)?.[PRICE_FIELD] ?? 0
-      subtotal += price * qty
-    } else {
-      const id = typeof item.product === 'object' ? item.product.id : item.product
-      const product = await req.payload.findByID({
-        collection: 'products',
-        id,
-        depth: 0,
-        overrideAccess: true,
-        select: { [PRICE_FIELD]: true, [WHOLESALE_PRICE_FIELD]: true },
-      })
-      const price = (product as any)?.[WHOLESALE_PRICE_FIELD] ?? (product as any)?.[PRICE_FIELD] ?? 0
-      subtotal += price * qty
-    }
-  }
+  const lines = await resolveCartLines({ items: data.items, req, useWholesale: true })
 
-  data.subtotal = subtotal
+  data.subtotal = sumLines(lines)
   data.pricingTier = 'wholesale'
   return data
 }
