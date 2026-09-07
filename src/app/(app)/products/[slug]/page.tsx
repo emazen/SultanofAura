@@ -102,7 +102,7 @@ export default async function ProductPage({ params }: Args) {
     offers: {
       '@type': 'AggregateOffer',
       availability: hasStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-      price: price,
+      price: typeof price === 'number' ? (price / 100).toFixed(2) : undefined,
       priceCurrency: 'TRY',
     },
   }
